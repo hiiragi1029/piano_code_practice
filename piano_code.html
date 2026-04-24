@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ピアノコード練習</title>
+<style>
+  body {
+    margin: 0;
+    height: 100vh;
+    background: #111;
+    color: white;
+    font-family: sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+  }
+  #chord {
+    font-size: 76px;
+    font-weight: bold;
+    margin: 32px;
+  }
+  button, select {
+    font-size: 16px;
+    padding: 10px 14px;
+    margin: 6px;
+    border-radius: 8px;
+    border: none;
+  }
+  .correct { background: #2ecc71; }
+  .wrong { background: #e74c3c; color: white; }
+  .small { color: #aaa; font-size: 14px; margin-top: 12px; }
+</style>
+</head>
+<body>
+
+  <div>
+    <select id="range">
+      <option value="seventh">7thまで</option>
+      <option value="other">それ以外</option>
+    </select>
+
+    <select id="mode">
+      <option value="normal">通常練習</option>
+      <option value="review">不正解問題集</option>
+    </select>
+  </div>
+
+  <div id="chord">Tap</div>
+
+  <div>
+    <button class="correct" onclick="markCorrect(event)">正解</button>
+    <button class="wrong" onclick="markWrong(event)">不正解</button>
+  </div>
+
+  <button onclick="resetWrongList(event)">不正解リストをリセット</button>
+
+  <div class="small" id="stats"></div>
+  <div class="small">画面タップで次の問題</div>
+
+<script>
+const roots = [
+  "C", "C#", "Db",
+  "D", "D#", "Eb",
+  "E",
+  "F", "F#", "Gb",
+  "G", "G#", "Ab",
+  "A", "A#", "Bb",
+  "B"
+];
+
+const seventhTypes = ["", "m", "7", "m7", "maj7"];
+const otherTypes = ["sus4", "dim", "aug", "6", "m6", "add9", "9"];
+
+let currentChord = "";
+let total = Number(localStorage.getItem("total") || 0);
+let correct = Number(localStorage.getItem("correct") || 0);
+let wrong = Number(localStorage.getItem("wrong") || 0);
+
+const chordEl = document.getElementById("chord");
+const rangeEl = document.getElementById("range");
+const modeEl = document.getElementById("mode");
+const statsEl = document.getElementById("stats");
+
+function getWrongList() {
+  return JSON.parse(localStorage.getItem("wrongList") || "[]");
+}
+
+function saveWrongList(list) {
+  localStorage.setItem("wrongList", JSON.stringify(list));
+}
+
+function makeRandomChord() {
+  const root = roots[Math.floor(Math.random() * roots.length)];
+  const types = rangeEl.value === "seventh" ? seventhTypes : otherTypes;
+  const type = types[Math.floor(Math.random() * types.length)];
+  return root + type;
+}
+
+function nextChord() {
+  if (modeEl.value === "review") {
+    const list = getWrongList();
+
+    if (list.length === 0) {
+      currentChord = "復習なし";
+      chordEl.textContent = currentChord;
+      updateStats();
+      return;
+    }
+
+    currentChord = list[Math.floor(Math.random() * list.length)];
+  } else {
+    currentChord = makeRandomChord();
+  }
+
+  chordEl.textContent = currentChord;
+  updateStats();
+}
+
+function markCorrect(event) {
+  event.stopPropagation();
+
+  if (currentChord === "復習なし") return;
+
+  total++;
+  correct++;
+
+  if (modeEl.value === "review") {
+    const list = getWrongList().filter(chord => chord !== currentChord);
+    saveWrongList(list);
+  }
+
+  saveStats();
+  nextChord();
+}
+
+function markWrong(event) {
+  event.stopPropagation();
+
+  if (currentChord === "復習なし") return;
+
+  total++;
+  wrong++;
+
+  const list = getWrongList();
+  if (!list.includes(currentChord)) {
+    list.push(currentChord);
+    saveWrongList(list);
+  }
+
+  saveStats();
+  nextChord();
+}
+
+function resetWrongList(event) {
+  event.stopPropagation();
+  localStorage.removeItem("wrongList");
+  nextChord();
+}
+
+function saveStats() {
+  localStorage.setItem("total", total);
+  localStorage.setItem("correct", correct);
+  localStorage.setItem("wrong", wrong);
+}
+
+function updateStats() {
+  const wrongList = getWrongList();
+  const rate = total === 0 ? 0 : Math.round((correct / total) * 100);
+
+  statsEl.textContent =
+    `正解: ${correct} / 不正解: ${wrong} / 正答率: ${rate}% / 不正解問題: ${wrongList.length}個`;
+}
+
+document.body.addEventListener("click", nextChord);
+rangeEl.addEventListener("change", nextChord);
+modeEl.addEventListener("change", nextChord);
+
+nextChord();
+</script>
+
+</body>
+</html>
