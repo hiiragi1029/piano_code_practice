@@ -37,11 +37,6 @@
     color: #ccc;
   }
 
-  #notes {
-    font-size: 24px;
-    margin: 12px;
-  }
-
   #cards {
     display: flex;
     gap: 12px;
@@ -106,7 +101,6 @@
   <div id="chord">Tap</div>
 
   <div id="answerArea" class="hidden">
-    <div id="notes"></div>
     <div id="cards"></div>
   </div>
 
@@ -195,7 +189,6 @@ const rangeEl = document.getElementById("range");
 const limitEl = document.getElementById("limitSeconds");
 const answerEl = document.getElementById("answerSeconds");
 const answerArea = document.getElementById("answerArea");
-const notesEl = document.getElementById("notes");
 const cardsEl = document.getElementById("cards");
 
 function makeRandomChord() {
@@ -263,7 +256,6 @@ function showAnswerThenNext() {
   const notes = getChordNotes(currentChord);
 
   timerEl.textContent = "答え表示中";
-  notesEl.textContent = `構成音：${notes.map(n => n.name).join(" - ")}`;
   drawCards(notes);
 
   answerArea.classList.remove("hidden");
