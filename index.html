@@ -42,47 +42,35 @@
     margin: 12px;
   }
 
-  #keyboard {
-    position: relative;
-    width: 420px;
-    height: 160px;
+  #cards {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    justify-content: center;
     margin-top: 16px;
   }
 
-  .white-key {
-    position: relative;
-    float: left;
-    width: 58px;
-    height: 150px;
-    background: white;
-    border: 1px solid #333;
+  .note-card {
+    background: #f1c40f;
     color: #111;
-    box-sizing: border-box;
+    width: 82px;
+    height: 96px;
+    border-radius: 14px;
     display: flex;
-    align-items: flex-end;
+    flex-direction: column;
+    align-items: center;
     justify-content: center;
-    padding-bottom: 8px;
+    font-weight: bold;
   }
 
-  .black-key {
-    position: absolute;
-    width: 36px;
-    height: 95px;
-    background: #111;
-    border: 1px solid #555;
-    color: white;
-    z-index: 2;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    padding-bottom: 6px;
-    box-sizing: border-box;
-    font-size: 12px;
+  .degree {
+    font-size: 14px;
+    color: #444;
+    margin-bottom: 6px;
   }
 
-  .active {
-    background: #f1c40f !important;
-    color: #111 !important;
+  .note-name {
+    font-size: 32px;
   }
 
   .hidden {
@@ -119,10 +107,10 @@
 
   <div id="answerArea" class="hidden">
     <div id="notes"></div>
-    <div id="keyboard"></div>
+    <div id="cards"></div>
   </div>
 
-  <div class="small">画面タップ、または時間切れで答え表示 → 次の問題</div>
+  <div class="small">画面タップ、または時間切れで答え表示 → もう一度タップで次の問題</div>
 
 <script>
 const roots = [
@@ -135,10 +123,7 @@ const roots = [
   "B"
 ];
 
-// セブンスじゃない三和音は除外
 const seventhTypes = ["7", "m7", "maj7"];
-
-// それ以外
 const otherTypes = ["sus4", "dim", "aug", "6", "m6", "add9", "9"];
 
 const noteNumbers = {
@@ -170,6 +155,34 @@ const chordIntervals = {
   "9": [0, 4, 7, 10, 14]
 };
 
+const intervalLabels = {
+  0: "Root",
+  3: "m3",
+  4: "3",
+  5: "sus4",
+  6: "♭5",
+  7: "5",
+  8: "♯5",
+  9: "6",
+  10: "♭7",
+  11: "7",
+  14: "9"
+};
+
+const orderPriority = {
+  0: 0,
+  3: 1,
+  4: 1,
+  5: 1,
+  6: 2,
+  7: 2,
+  8: 2,
+  9: 3,
+  10: 3,
+  11: 3,
+  14: 4
+};
+
 let currentChord = null;
 let timerId = null;
 let answerTimerId = null;
@@ -183,7 +196,7 @@ const limitEl = document.getElementById("limitSeconds");
 const answerEl = document.getElementById("answerSeconds");
 const answerArea = document.getElementById("answerArea");
 const notesEl = document.getElementById("notes");
-const keyboardEl = document.getElementById("keyboard");
+const cardsEl = document.getElementById("cards");
 
 function makeRandomChord() {
   const root = roots[Math.floor(Math.random() * roots.length)];
@@ -201,14 +214,19 @@ function getChordNotes(chord) {
   const rootNumber = noteNumbers[chord.root];
   const intervals = chordIntervals[chord.type];
 
-  return intervals.map(interval => {
-    const noteNumber = (rootNumber + interval) % 12;
+  return intervals
+    .map(interval => {
+      const noteNumber = (rootNumber + interval) % 12;
 
-    return {
-      name: numberToNote[noteNumber],
-      order: interval
-    };
-  });
+      return {
+        name: numberToNote[noteNumber],
+        interval: interval,
+        label: intervalLabels[interval] || ""
+      };
+    })
+    .sort((a, b) => {
+      return (orderPriority[a.interval] ?? 99) - (orderPriority[b.interval] ?? 99);
+    });
 }
 
 function nextQuestion() {
@@ -246,7 +264,7 @@ function showAnswerThenNext() {
 
   timerEl.textContent = "答え表示中";
   notesEl.textContent = `構成音：${notes.map(n => n.name).join(" - ")}`;
-  drawKeyboard(notes);
+  drawCards(notes);
 
   answerArea.classList.remove("hidden");
 
@@ -257,44 +275,24 @@ function showAnswerThenNext() {
   }, answerSeconds * 1000);
 }
 
-function drawKeyboard(activeNotes) {
-  keyboardEl.innerHTML = "";
+function drawCards(notes) {
+  cardsEl.innerHTML = "";
 
-  const activeNames = activeNotes.map(n => n.name);
+  notes.forEach(note => {
+    const card = document.createElement("div");
+    card.className = "note-card";
 
-  const whiteNotes = ["C", "D", "E", "F", "G", "A", "B"];
+    const degree = document.createElement("div");
+    degree.className = "degree";
+    degree.textContent = note.label;
 
-  const blackKeys = [
-    { note: "C#", left: 42 },
-    { note: "Eb", left: 102 },
-    { note: "F#", left: 218 },
-    { note: "Ab", left: 278 },
-    { note: "Bb", left: 338 }
-  ];
+    const name = document.createElement("div");
+    name.className = "note-name";
+    name.textContent = note.name;
 
-  whiteNotes.forEach(note => {
-    const key = document.createElement("div");
-    key.className = "white-key";
-    key.textContent = note;
-
-    if (activeNames.includes(note)) {
-      key.classList.add("active");
-    }
-
-    keyboardEl.appendChild(key);
-  });
-
-  blackKeys.forEach(item => {
-    const key = document.createElement("div");
-    key.className = "black-key";
-    key.style.left = item.left + "px";
-    key.textContent = item.note;
-
-    if (activeNames.includes(item.note)) {
-      key.classList.add("active");
-    }
-
-    keyboardEl.appendChild(key);
+    card.appendChild(degree);
+    card.appendChild(name);
+    cardsEl.appendChild(card);
   });
 }
 
