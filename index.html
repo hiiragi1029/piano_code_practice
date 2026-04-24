@@ -7,7 +7,7 @@
 <style>
   body {
     margin: 0;
-    height: 100vh;
+    min-height: 100vh;
     background: #111;
     color: white;
     font-family: sans-serif;
@@ -17,21 +17,83 @@
     justify-content: center;
     user-select: none;
   }
-  #chord {
-    font-size: 76px;
-    font-weight: bold;
-    margin: 32px;
-  }
-  button, select {
+
+  select, input, button {
     font-size: 16px;
-    padding: 10px 14px;
-    margin: 6px;
+    padding: 8px 10px;
+    margin: 4px;
     border-radius: 8px;
     border: none;
   }
-  .correct { background: #2ecc71; }
-  .wrong { background: #e74c3c; color: white; }
-  .small { color: #aaa; font-size: 14px; margin-top: 12px; }
+
+  #chord {
+    font-size: 76px;
+    font-weight: bold;
+    margin: 24px;
+  }
+
+  #timer {
+    font-size: 22px;
+    color: #ccc;
+  }
+
+  #notes {
+    font-size: 24px;
+    margin: 12px;
+  }
+
+  #keyboard {
+    position: relative;
+    width: 420px;
+    height: 160px;
+    margin-top: 16px;
+  }
+
+  .white-key {
+    position: relative;
+    float: left;
+    width: 58px;
+    height: 150px;
+    background: white;
+    border: 1px solid #333;
+    color: #111;
+    box-sizing: border-box;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 8px;
+  }
+
+  .black-key {
+    position: absolute;
+    width: 36px;
+    height: 95px;
+    background: #111;
+    border: 1px solid #555;
+    color: white;
+    z-index: 2;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding-bottom: 6px;
+    box-sizing: border-box;
+    font-size: 12px;
+  }
+
+  .active {
+    background: #f1c40f !important;
+    color: #111 !important;
+  }
+
+  .hidden {
+    display: none;
+  }
+
+  .small {
+    color: #aaa;
+    font-size: 14px;
+    margin-top: 10px;
+  }
 </style>
 </head>
 <body>
@@ -42,23 +104,24 @@
       <option value="other">それ以外</option>
     </select>
 
-    <select id="mode">
-      <option value="normal">通常練習</option>
-      <option value="review">不正解問題集</option>
-    </select>
+    制限時間：
+    <input id="limitSeconds" type="number" value="5" min="1" max="60" style="width:60px;">
+    秒
+
+    答え表示：
+    <input id="answerSeconds" type="number" value="3" min="1" max="10" style="width:60px;">
+    秒
   </div>
 
+  <div id="timer">残り: 5秒</div>
   <div id="chord">Tap</div>
 
-  <div>
-    <button class="correct" onclick="markCorrect(event)">正解</button>
-    <button class="wrong" onclick="markWrong(event)">不正解</button>
+  <div id="answerArea" class="hidden">
+    <div id="notes"></div>
+    <div id="keyboard"></div>
   </div>
 
-  <button onclick="resetWrongList(event)">不正解リストをリセット</button>
-
-  <div class="small" id="stats"></div>
-  <div class="small">画面タップで次の問題</div>
+  <div class="small">画面タップ、または時間切れで答え表示 → 次の問題</div>
 
 <script>
 const roots = [
@@ -74,111 +137,169 @@ const roots = [
 const seventhTypes = ["", "m", "7", "m7", "maj7"];
 const otherTypes = ["sus4", "dim", "aug", "6", "m6", "add9", "9"];
 
-let currentChord = "";
-let total = Number(localStorage.getItem("total") || 0);
-let correct = Number(localStorage.getItem("correct") || 0);
-let wrong = Number(localStorage.getItem("wrong") || 0);
+const noteNumbers = {
+  "C": 0, "C#": 1, "Db": 1,
+  "D": 2, "D#": 3, "Eb": 3,
+  "E": 4,
+  "F": 5, "F#": 6, "Gb": 6,
+  "G": 7, "G#": 8, "Ab": 8,
+  "A": 9, "A#": 10, "Bb": 10,
+  "B": 11
+};
+
+const numberToNote = [
+  "C", "C#", "D", "Eb", "E", "F",
+  "F#", "G", "Ab", "A", "Bb", "B"
+];
+
+const chordIntervals = {
+  "": [0, 4, 7],
+  "m": [0, 3, 7],
+  "7": [0, 4, 7, 10],
+  "m7": [0, 3, 7, 10],
+  "maj7": [0, 4, 7, 11],
+  "sus4": [0, 5, 7],
+  "dim": [0, 3, 6],
+  "aug": [0, 4, 8],
+  "6": [0, 4, 7, 9],
+  "m6": [0, 3, 7, 9],
+  "add9": [0, 4, 7, 2],
+  "9": [0, 4, 7, 10, 2]
+};
+
+let currentChord = null;
+let timerId = null;
+let answerTimerId = null;
+let remaining = 5;
+let showingAnswer = false;
 
 const chordEl = document.getElementById("chord");
+const timerEl = document.getElementById("timer");
 const rangeEl = document.getElementById("range");
-const modeEl = document.getElementById("mode");
-const statsEl = document.getElementById("stats");
-
-function getWrongList() {
-  return JSON.parse(localStorage.getItem("wrongList") || "[]");
-}
-
-function saveWrongList(list) {
-  localStorage.setItem("wrongList", JSON.stringify(list));
-}
+const limitEl = document.getElementById("limitSeconds");
+const answerEl = document.getElementById("answerSeconds");
+const answerArea = document.getElementById("answerArea");
+const notesEl = document.getElementById("notes");
+const keyboardEl = document.getElementById("keyboard");
 
 function makeRandomChord() {
   const root = roots[Math.floor(Math.random() * roots.length)];
   const types = rangeEl.value === "seventh" ? seventhTypes : otherTypes;
   const type = types[Math.floor(Math.random() * types.length)];
-  return root + type;
+
+  return {
+    name: root + type,
+    root,
+    type
+  };
 }
 
-function nextChord() {
-  if (modeEl.value === "review") {
-    const list = getWrongList();
+function getChordNotes(chord) {
+  const rootNumber = noteNumbers[chord.root];
+  const intervals = chordIntervals[chord.type];
 
-    if (list.length === 0) {
-      currentChord = "復習なし";
-      chordEl.textContent = currentChord;
-      updateStats();
-      return;
+  return intervals.map(interval => {
+    const noteNumber = (rootNumber + interval) % 12;
+    return numberToNote[noteNumber];
+  });
+}
+
+function nextQuestion() {
+  clearTimers();
+
+  showingAnswer = false;
+  answerArea.classList.add("hidden");
+
+  currentChord = makeRandomChord();
+  chordEl.textContent = currentChord.name;
+
+  remaining = Number(limitEl.value) || 5;
+  timerEl.textContent = `残り: ${remaining}秒`;
+
+  timerId = setInterval(() => {
+    remaining--;
+    timerEl.textContent = `残り: ${remaining}秒`;
+
+    if (remaining <= 0) {
+      showAnswerThenNext();
+    }
+  }, 1000);
+}
+
+function showAnswerThenNext() {
+  if (showingAnswer) return;
+
+  showingAnswer = true;
+  clearInterval(timerId);
+
+  const notes = getChordNotes(currentChord);
+
+  timerEl.textContent = "答え表示中";
+  notesEl.textContent = `構成音：${notes.join(" - ")}`;
+  drawKeyboard(notes);
+
+  answerArea.classList.remove("hidden");
+
+  const answerSeconds = Number(answerEl.value) || 3;
+
+  answerTimerId = setTimeout(() => {
+    nextQuestion();
+  }, answerSeconds * 1000);
+}
+
+function drawKeyboard(activeNotes) {
+  keyboardEl.innerHTML = "";
+
+  const whiteNotes = ["C", "D", "E", "F", "G", "A", "B"];
+  const blackKeys = [
+    { note: "C#", left: 42 },
+    { note: "Eb", left: 102 },
+    { note: "F#", left: 218 },
+    { note: "Ab", left: 278 },
+    { note: "Bb", left: 338 }
+  ];
+
+  whiteNotes.forEach(note => {
+    const key = document.createElement("div");
+    key.className = "white-key";
+    key.textContent = note;
+
+    if (activeNotes.includes(note)) {
+      key.classList.add("active");
     }
 
-    currentChord = list[Math.floor(Math.random() * list.length)];
-  } else {
-    currentChord = makeRandomChord();
-  }
+    keyboardEl.appendChild(key);
+  });
 
-  chordEl.textContent = currentChord;
-  updateStats();
+  blackKeys.forEach(item => {
+    const key = document.createElement("div");
+    key.className = "black-key";
+    key.style.left = item.left + "px";
+    key.textContent = item.note;
+
+    if (activeNotes.includes(item.note)) {
+      key.classList.add("active");
+    }
+
+    keyboardEl.appendChild(key);
+  });
 }
 
-function markCorrect(event) {
-  event.stopPropagation();
-
-  if (currentChord === "復習なし") return;
-
-  total++;
-  correct++;
-
-  if (modeEl.value === "review") {
-    const list = getWrongList().filter(chord => chord !== currentChord);
-    saveWrongList(list);
-  }
-
-  saveStats();
-  nextChord();
+function clearTimers() {
+  clearInterval(timerId);
+  clearTimeout(answerTimerId);
 }
 
-function markWrong(event) {
-  event.stopPropagation();
+document.body.addEventListener("click", () => {
+  if (showingAnswer) return;
+  showAnswerThenNext();
+});
 
-  if (currentChord === "復習なし") return;
+rangeEl.addEventListener("change", nextQuestion);
+limitEl.addEventListener("change", nextQuestion);
+answerEl.addEventListener("change", nextQuestion);
 
-  total++;
-  wrong++;
-
-  const list = getWrongList();
-  if (!list.includes(currentChord)) {
-    list.push(currentChord);
-    saveWrongList(list);
-  }
-
-  saveStats();
-  nextChord();
-}
-
-function resetWrongList(event) {
-  event.stopPropagation();
-  localStorage.removeItem("wrongList");
-  nextChord();
-}
-
-function saveStats() {
-  localStorage.setItem("total", total);
-  localStorage.setItem("correct", correct);
-  localStorage.setItem("wrong", wrong);
-}
-
-function updateStats() {
-  const wrongList = getWrongList();
-  const rate = total === 0 ? 0 : Math.round((correct / total) * 100);
-
-  statsEl.textContent =
-    `正解: ${correct} / 不正解: ${wrong} / 正答率: ${rate}% / 不正解問題: ${wrongList.length}個`;
-}
-
-document.body.addEventListener("click", nextChord);
-rangeEl.addEventListener("change", nextChord);
-modeEl.addEventListener("change", nextChord);
-
-nextChord();
+nextQuestion();
 </script>
 
 </body>
