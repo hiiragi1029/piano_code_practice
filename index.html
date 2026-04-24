@@ -1,128 +1,3 @@
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>ピアノコード練習</title>
-<style>
-  body {
-    margin: 0;
-    min-height: 100vh;
-    background: #111;
-    color: white;
-    font-family: sans-serif;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    user-select: none;
-  }
-
-  select, input, button {
-    font-size: 16px;
-    padding: 8px 10px;
-    margin: 4px;
-    border-radius: 8px;
-    border: none;
-  }
-
-  #chord {
-    font-size: 76px;
-    font-weight: bold;
-    margin: 24px;
-  }
-
-  #timer {
-    font-size: 22px;
-    color: #ccc;
-  }
-
-  #notes {
-    font-size: 24px;
-    margin: 12px;
-  }
-
-  #keyboard {
-    position: relative;
-    width: 420px;
-    height: 160px;
-    margin-top: 16px;
-  }
-
-  .white-key {
-    position: relative;
-    float: left;
-    width: 58px;
-    height: 150px;
-    background: white;
-    border: 1px solid #333;
-    color: #111;
-    box-sizing: border-box;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    padding-bottom: 8px;
-  }
-
-  .black-key {
-    position: absolute;
-    width: 36px;
-    height: 95px;
-    background: #111;
-    border: 1px solid #555;
-    color: white;
-    z-index: 2;
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    padding-bottom: 6px;
-    box-sizing: border-box;
-    font-size: 12px;
-  }
-
-  .active {
-    background: #f1c40f !important;
-    color: #111 !important;
-  }
-
-  .hidden {
-    display: none;
-  }
-
-  .small {
-    color: #aaa;
-    font-size: 14px;
-    margin-top: 10px;
-  }
-</style>
-</head>
-<body>
-
-  <div>
-    <select id="range">
-      <option value="seventh">7thまで</option>
-      <option value="other">それ以外</option>
-    </select>
-
-    制限時間：
-    <input id="limitSeconds" type="number" value="5" min="1" max="60" style="width:60px;">
-    秒
-
-    答え表示：
-    <input id="answerSeconds" type="number" value="3" min="1" max="10" style="width:60px;">
-    秒
-  </div>
-
-  <div id="timer">残り: 5秒</div>
-  <div id="chord">Tap</div>
-
-  <div id="answerArea" class="hidden">
-    <div id="notes"></div>
-    <div id="keyboard"></div>
-  </div>
-
-  <div class="small">画面タップ、または時間切れで答え表示 → 次の問題</div>
-
 <script>
 const roots = [
   "C", "C#", "Db",
@@ -134,7 +9,8 @@ const roots = [
   "B"
 ];
 
-const seventhTypes = ["", "m", "7", "m7", "maj7"];
+// 三和音を除外
+const seventhTypes = ["7", "m7", "maj7"];
 const otherTypes = ["sus4", "dim", "aug", "6", "m6", "add9", "9"];
 
 const noteNumbers = {
@@ -153,8 +29,6 @@ const numberToNote = [
 ];
 
 const chordIntervals = {
-  "": [0, 4, 7],
-  "m": [0, 3, 7],
   "7": [0, 4, 7, 10],
   "m7": [0, 3, 7, 10],
   "maj7": [0, 4, 7, 11],
@@ -163,8 +37,8 @@ const chordIntervals = {
   "aug": [0, 4, 8],
   "6": [0, 4, 7, 9],
   "m6": [0, 3, 7, 9],
-  "add9": [0, 4, 7, 2],
-  "9": [0, 4, 7, 10, 2]
+  "add9": [0, 4, 7, 14],
+  "9": [0, 4, 7, 10, 14]
 };
 
 let currentChord = null;
@@ -198,9 +72,13 @@ function getChordNotes(chord) {
   const rootNumber = noteNumbers[chord.root];
   const intervals = chordIntervals[chord.type];
 
+  // ルート音から順に並ぶ
   return intervals.map(interval => {
     const noteNumber = (rootNumber + interval) % 12;
-    return numberToNote[noteNumber];
+    return {
+      name: numberToNote[noteNumber],
+      order: interval
+    };
   });
 }
 
@@ -227,7 +105,10 @@ function nextQuestion() {
 }
 
 function showAnswerThenNext() {
-  if (showingAnswer) return;
+  if (showingAnswer) {
+    nextQuestion();
+    return;
+  }
 
   showingAnswer = true;
   clearInterval(timerId);
@@ -235,7 +116,7 @@ function showAnswerThenNext() {
   const notes = getChordNotes(currentChord);
 
   timerEl.textContent = "答え表示中";
-  notesEl.textContent = `構成音：${notes.join(" - ")}`;
+  notesEl.textContent = `構成音：${notes.map(n => n.name).join(" - ")}`;
   drawKeyboard(notes);
 
   answerArea.classList.remove("hidden");
@@ -249,6 +130,8 @@ function showAnswerThenNext() {
 
 function drawKeyboard(activeNotes) {
   keyboardEl.innerHTML = "";
+
+  const activeNames = activeNotes.map(n => n.name);
 
   const whiteNotes = ["C", "D", "E", "F", "G", "A", "B"];
   const blackKeys = [
@@ -264,7 +147,7 @@ function drawKeyboard(activeNotes) {
     key.className = "white-key";
     key.textContent = note;
 
-    if (activeNotes.includes(note)) {
+    if (activeNames.includes(note)) {
       key.classList.add("active");
     }
 
@@ -277,7 +160,7 @@ function drawKeyboard(activeNotes) {
     key.style.left = item.left + "px";
     key.textContent = item.note;
 
-    if (activeNotes.includes(item.note)) {
+    if (activeNames.includes(item.note)) {
       key.classList.add("active");
     }
 
@@ -291,7 +174,6 @@ function clearTimers() {
 }
 
 document.body.addEventListener("click", () => {
-  if (showingAnswer) return;
   showAnswerThenNext();
 });
 
@@ -301,6 +183,3 @@ answerEl.addEventListener("change", nextQuestion);
 
 nextQuestion();
 </script>
-
-</body>
-</html>
